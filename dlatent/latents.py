@@ -16,6 +16,8 @@ def calc_dists_and_latents(embeddings,
     (batchsize * seqlen) x nd x embed_dim. 
     Note hidden / nd must equal embed_dim """
 
+    nd = embeddings.shape[0]
+
     # Calculate pairwise distances (sums/dot over embedding dimension, called 'h')
     # This means distances are (batchsize * seqlen) x nd x num_embed
     distances = enc_outputs.pow(2).sum(2).unsqueeze(-1) +\
@@ -105,7 +107,7 @@ class VectorQuant(torch.nn.Module):
     batchsize x hidden x seqlen dimension tensor.
     returns: (enc_outputs, batchsize, seqlen), where:
       1. enc_outputs are stacked as a
-      (batchsize * seqlen) x embed_dim x nd dimension tensor.
+      (batchsize * seqlen) x nd x embed_dim dimension tensor.
       2. batchsize, seqlen were the initial parameters
     """
     # Get parameters
@@ -118,8 +120,9 @@ class VectorQuant(torch.nn.Module):
   
   def split_outputs(self, encodings, batchsize, seqlen):
 
-    # Undoes "stack_enc_outputs"
-    encodings = encodings.view(batchsize, -1, seqlen)
+    # Undoes "stack_enc_outputs, but is usually applied to
+    # discretized encodings
+    encodings = encodings.contiguous().view(batchsize, -1, seqlen)
     return encodings
     
   def forward(self, inputs,  
@@ -141,11 +144,13 @@ class VectorQuant(torch.nn.Module):
  
     # Possibly get the latents via gumbel-softmax sampling
     if self.gsoftmax and not return_latents:
-      encodings, latents, distances = self.gs_sample(enc_outputs, temperature = temperature)
+      encodings, latents, distances = self.gs_sample(
+        enc_outputs, temperature = temperature
+      )
     # Else, nearest-neighbor search
     else:
       encodings, latents, distances = calc_dists_and_latents(self.embeddings, enc_outputs)
-    
+
     # Compute KL Loss 
     if self.soft_train and self.training:
       distprobs = distances / distances.sum(2).unsqueeze(0) # Create distribution over latents
@@ -219,10 +224,14 @@ class VectorQuant(torch.nn.Module):
     
     # Latents are same dimensionality
     latents = gumbel_softmax.gumbel_softmax(
-      2, distances, temperature = temperature, **kwargs
+      dim = 2,
+      logits = distances,
+      temperature = temperature,
+      device = self.device
     )
-    encodings = torch.einsum('dhk,bdk->bh', [self.embeddings, latents])
-    
+
+    # Encodings are (batchsize*seqlen) x nd x hidden
+    encodings = torch.einsum('dhk,bdk->bdh', [self.embeddings, latents])
     return encodings, latents, distances
     
 
@@ -264,7 +273,7 @@ class VectorQuant(torch.nn.Module):
       # Sample
       latent_probs_nd = latent_probs[:, d]
       inds_nd = torch.distributions.Categorical(
-          logits = latent_probs_nd.values
+          logits = latent_probs_nd
       ).sample(torch.Size([K]))
       inds.append(inds_nd)
 
@@ -273,11 +282,9 @@ class VectorQuant(torch.nn.Module):
       log_probs.append(log_probs_nd)    
 
     
-    # Reshape and return
+    # Reshape: nd x numsample (K) x (batchsize * seqlen)
     inds = torch.stack(inds)
-    print(inds.shape)
     log_probs = torch.stack(log_probs)
-    print(log_probs.shape)
     
     # Possibly use the second sampling method (basically, 
     # we construct a binary mask and when the binary mask 
@@ -285,16 +292,16 @@ class VectorQuant(torch.nn.Module):
     if bit_flips:
       _, latents, _ = calc_dists_and_latents(self.embeddings, inputs_stacked,
                                        compute_encodings = True) 
+      latents = latents.view(self.nd, 1, inds.shape[2])
       mask = torch.distributions.Bernoulli(bit_flip_prob).sample(
-        torch.Size([inds.shape['nd'], inds.shape['numsample'], inds.shape['latents']])
-      )
-      mask = NamedTensor(mask, names = ('nd', 'numsample', 'latents')).long().to(self.device)
+        torch.Size([self.nd, K, inds.shape[2]])
+      ).long()
       inds = mask * inds + (1 - mask) * latents
-    
 
+    # Possibly split to nd x numsample x batchsize x seqlen
     if split_latents:
-      log_probs = log_probs.split('latents', names = latent_dims, **ldims_vals)
-      inds = inds.split('latents', names = latent_dims, **ldims_vals)
+      log_probs = log_probs.view(self.nd, K, batchsize, seqlen)
+      inds = inds.view(self.nd, K, batchsize, seqlen)
       
     if bit_flips:
       return inds, None

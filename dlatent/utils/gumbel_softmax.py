@@ -29,7 +29,8 @@ def gumbel_softmax(dim, logits, temperature, device,
   """ If hard == true, use a hard sample but with a straight through gradient
   (accomplished by the detach call)"""
   y = gumbel_softmax_sample(
-    dim, logits, temperature, norm = norm, eps = eps, device = device
+    dim = dim, logits = logits,  device = device,
+    temperature = temperature, norm = norm, eps = eps,
   )
   if hard:
     _, max_idx = y.max(dim)
@@ -37,4 +38,4 @@ def gumbel_softmax(dim, logits, temperature, device,
     one_hot = torch.zeros(*y.shape)
     one_hot.scatter_(dim, max_idx, 1)
     y = (one_hot - y).detach() + y
-  return y
+  return y.contiguous()
