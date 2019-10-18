@@ -157,7 +157,7 @@ class VectorQuant(torch.nn.Module):
 
     # Compute KL Loss 
     if self.soft_train and self.training:
-      distprobs = distances / distances.sum(2).unsqueeze(0) # Create distribution over latents
+      distprobs = distances / distances.sum(2).unsqueeze(2) # Create distribution over latents
       kl = torch.einsum('bdk,bdk->b', [torch.log(distprobs/self.prior), distprobs]).mean()
 
     # Helpful for analyzing index collapse and running kmeans, return latents
@@ -177,24 +177,28 @@ class VectorQuant(torch.nn.Module):
 
       for d in range(self.nd):
         nd_latent = latents[d, :]
-        print(nd_latent.shape)
-        print(new_sums[d].shape)
-        print(enc_outputs[:, d].shape)
         new_sums[d].index_add_(1, 
                                nd_latent,
-                               enc_outputs[:, d])
+                               enc_outputs[:, d].transpose(0, 1))
         new_counts.append(
             torch.bincount(nd_latent, minlength = self.num_embed)
         )
 
-      # Exponential moving average updates - epsilon prevents div0 errors
+      # Make them all floats
+      # ema_counts, new_couts are nd x num_embed
+      # ema_sums, new_sums are nd x embed_dim x num_embed
+      self.ema_counts = self.ema_counts.float()
+      new_sums = torch.stack(new_sums).float()
       new_counts = torch.stack(new_counts).float()
+
+
+      # Exponential moving average updates - epsilon prevents div0 errors
       self.ema_counts = self.decay * self.ema_counts + (1 - self.decay) * new_counts
       self.ema_sums = self.decay * self.ema_sums + (1 - self.decay) * new_sums
-      new_embeddings = self.ema_sums / self.ema_counts
+      new_embed = self.ema_sums.transpose(1, 2) / self.ema_counts.unsqueeze(-1)
       
       # Update embeddings
-      self.embeddings = new_embeddings
+      self.embeddings = new_embed
     
     # Resplit and create output using straight-through gradient. -----------
     encodings = self.split_outputs(
@@ -304,8 +308,8 @@ class VectorQuant(torch.nn.Module):
                                        compute_encodings = True) 
       latents = latents.view(self.nd, 1, inds.shape[2])
       mask = torch.distributions.Bernoulli(bit_flip_prob).sample(
-        torch.Size([self.nd, K, inds.shape[2]])
-      ).long()
+        torch.Size([self.nd, K, inds.shape[2]]), 
+      ).long().to(self.device)
       inds = mask * inds + (1 - mask) * latents
 
     # Possibly split to nd x numsample x batchsize x seqlen

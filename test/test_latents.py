@@ -35,15 +35,31 @@ class TestVectorQuant(unittest.TestCase):
 						     gsoftmax = False,
 						     EMA = True)
 
-	def test_vq(self):
+		cls.vq3 = VectorQuant(embed_dim = cls.embed_dim,
+						     num_embed = cls.num_embed, 
+						     nd = cls.nd, 
+						     commit_cost = cls.commit_cost,
+						     device = device,
+						     soft_train = True)
 
-		enc_outputs = torch.randn(self.batchsize, self.hidden, self.seqlen)
+	def test_forward(self):
+
+		enc_outputs = torch.randn(
+			self.batchsize, self.hidden, self.seqlen, 
+			device = torch.device(device)
+		)
 		self.vq1.sample(enc_outputs)
 		self.vq1(enc_outputs)
 
 		self.vq2.sample(enc_outputs)
 		self.vq2(enc_outputs)
 
+		self.vq3.sample(enc_outputs)
+		self.vq3(enc_outputs)
+
+	def test_backward(self):
+		
+		pass
 
 
 
