@@ -28,6 +28,12 @@ class LSTMDecoder(nn.Module):
         
     # input: seqlen, batch, hidden
     def forward(self, x, z):
+        """
+        :param x: Actual text to reconstruct,
+        seqlen by batch by hidden.
+        :param z: (Possibly discretized) encoder outputs,
+        seqlen/(n_downsize)**2 by batchsize by d_latent
+        """
         
         x = dropout_dim(x, self.input_dropout, 0, self.training)
         x = dropout_dim(x, self.word_dropout, -1, self.training)
