@@ -72,6 +72,10 @@ class VectorQuant(torch.nn.Module):
     self.gsoftmax = gsoftmax
     self.nd = nd
     self.EMA = EMA
+
+    # Some conflicts
+    if self.EMA and self.gsoftmax:
+      raise ValueError('Cannot use both gsoftmax and EMA training')
           
     # Initialize embeddings and (possibly) EMA cache
     if self.EMA:
@@ -162,17 +166,23 @@ class VectorQuant(torch.nn.Module):
     
     # Possible EMA update -------------------------------------
     if self.EMA and self.training:
-      
+
       # Get new counts and new sums
       new_counts = []
-      new_sums = torch.zeros(self.nd, self.embed_dim, self.num_embed, 
-                             requires_grad = False).to(self.device)   
-      
+      new_sums = [
+        torch.zeros(
+          self.embed_dim, self.num_embed, requires_grad = False
+          ).to(self.device) for i in range(self.nd)
+        ]
+
       for d in range(self.nd):
-        nd_latent = latents[:, d]
-        new_sums[d].index_add_(dim = 1, 
-                               index = nd_latent,
-                               tensor = enc_outputs[:, d])
+        nd_latent = latents[d, :]
+        print(nd_latent.shape)
+        print(new_sums[d].shape)
+        print(enc_outputs[:, d].shape)
+        new_sums[d].index_add_(1, 
+                               nd_latent,
+                               enc_outputs[:, d])
         new_counts.append(
             torch.bincount(nd_latent, minlength = self.num_embed)
         )
