@@ -133,7 +133,8 @@ class VectorQuant(torch.nn.Module):
               temperature = 1,
               return_latents = False):
     """
-    :param inputs: outputs of the encoder
+    :param inputs: outputs of the encoder,  stacked as a 
+    batchsize x hidden x seqlen dimension tensor.
     :param temperature: temperature for gumbel-softmax sample, if the class
     was initialized with gsample = True.
     :param bool return_latents: if True, just return the latents (not their embeddings)'

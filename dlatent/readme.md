@@ -17,3 +17,4 @@ There are also a variety of utilities scattered around (kmeans, weight dropout, 
 ## To-Do
 
 - Play with norm parameter ('l2' or 'softmax') in gumbel softmax
+- 
