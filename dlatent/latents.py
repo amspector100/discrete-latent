@@ -47,8 +47,8 @@ def calc_dists_and_latents(embeddings,
 
 class VectorQuant(torch.nn.Module):
   
-  def __init__(self, embed_dim, num_embed, nd, commit_cost,
-               device, soft_train = False,
+  def __init__(self, embed_dim, num_embed, nd, device,
+               commit_cost = 0.2, soft_train = False,
                gsoftmax = False,
                EMA = False, decay = 0.99, epsilon = 1):
     """
@@ -62,7 +62,7 @@ class VectorQuant(torch.nn.Module):
     :param bool gsoftmax: if true, don't use VQ-VAE but use gumbel-softmax sampling"""
     
     super(VectorQuant, self).__init__()
-    
+
     # save hparams
     self.num_embed = num_embed
     self.embed_dim = embed_dim 
@@ -118,7 +118,7 @@ class VectorQuant(torch.nn.Module):
     batchsize, seqlen = enc_outputs.size(0), enc_outputs.size(2)
 
     # Re-view
-    enc_outputs = enc_outputs.view(batchsize*seqlen, self.nd, -1)
+    enc_outputs = enc_outputs.contiguous().view(batchsize*seqlen, self.nd, -1)
 
     return enc_outputs, (batchsize, seqlen)
   
@@ -139,7 +139,7 @@ class VectorQuant(torch.nn.Module):
     was initialized with gsample = True.
     :param bool return_latents: if True, just return the latents (not their embeddings)'
     Returns:
-        Outputs: the quantized vector. 
+        Outputs: the quantized vector, batchsize x hidden x seqlen.
         Loss: the loss to add to backprop through.
         Commit_loss: the distance between the cts vectors and the quantized output
     """
@@ -224,7 +224,7 @@ class VectorQuant(torch.nn.Module):
       loss += kl
     else:
       kl = torch.tensor(0)   
-    return output, loss, commit_loss, kl
+    return output, (loss, commit_loss, kl)
   
   
   def gs_sample(self, 

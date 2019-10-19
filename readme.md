@@ -13,7 +13,7 @@ The big-picture structure is as follows:
 - decoders.py contains decoder classes
 - latents.py contains classes which handle the transfer of 
 information between the encoder/decoder (e.g. the VQVAE class)
-- vae.py contains the master class which wraps the encoder,
+- vqvae.py contains the master class which wraps the encoder,
 decoder, and latent classes
 - training.py contains functions for training the vae
 - data.py handles loading/processing data

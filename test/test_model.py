@@ -5,6 +5,8 @@ from .context import dlatent
 from dlatent.latents import VectorQuant
 from dlatent.encoders import LSTMEncoder
 from dlatent.decoders import LSTMDecoder
+from dlatent.vqvae import VQVAE
+
 import torch
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -99,7 +101,6 @@ class TestLSTMs(unittest.TestCase):
 		# and returns tensors of the right
 		# shape.
 
-
 		# Test encoder
 		x = torch.randn(
 			self.seqlen, self.batchsize, self.d_embedding, 
@@ -124,6 +125,65 @@ class TestLSTMs(unittest.TestCase):
 				]
 			)
 		)
+
+class TestVAE(unittest.TestCase):
+
+	@classmethod
+	def setUpClass(cls):
+
+		cls.seqlen = 64
+		cls.batchsize = 30
+
+		cls.vocab_size = 1000
+		cls.padding_idx = 1
+		cls.d_embedding = 200
+		cls.d_hidden = 64
+		cls.d_latent = 128
+		cls.num_latent_embed = 32
+		cls.nd = 2
+		cls.num_downsize = 2
+
+		cls.vqvae = VQVAE.from_params(
+				cls.vocab_size,
+				cls.padding_idx,
+				cls.d_embedding,
+				cls.d_hidden,
+				cls.d_latent,
+				cls.num_latent_embed,
+				device = device,
+				nd = cls.nd,
+				n_downsize = cls.num_downsize,
+		)
+
+		cls.vqvae_gs = VQVAE.from_params(
+				cls.vocab_size,
+				cls.padding_idx,
+				cls.d_embedding,
+				cls.d_hidden,
+				cls.d_latent,
+				cls.num_latent_embed,
+				device = device,
+				nd = cls.nd,
+				n_downsize = cls.num_downsize,
+				gsoftmax = True,
+				soft_train = True
+		)
+
+		cls.x = torch.distributions.Categorical(
+			probs = torch.ones(cls.vocab_size)/cls.vocab_size
+		).sample(sample_shape = torch.Size(
+			[cls.seqlen, cls.batchsize]
+			)
+		).to(torch.device(device))
+
+	def test_forward(self):
+
+		# Regular
+		out, _ = self.vqvae.forward(self.x, discrete = False)
+		out, _ = self.vqvae.forward(self.x, discrete  = True)
+
+		# Gsoftmax
+		out, _ = self.vqvae_gs.forward(self.x, temperature = 10)
 
 
 
